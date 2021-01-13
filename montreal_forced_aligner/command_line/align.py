@@ -103,6 +103,81 @@ def align_corpus(args):
             yaml.dump(conf, f)
 
 
+def custom_align_corpus(temp_directory, corpus_directory, output_directory, dictionary_path, acoustic_model_path,
+                        config_path, speaker_characters, clean=False, num_jobs=0, debug = False, verbose=False):
+    all_begin = time.time()
+    if not temp_directory:
+        temp_dir = TEMP_DIR
+    else:
+        temp_dir = os.path.expanduser(temp_directory)
+    corpus_name = os.path.basename(corpus_directory)
+    if corpus_name == '':
+        corpus_directory = os.path.dirname(corpus_directory)
+        corpus_name = os.path.basename(corpus_directory)
+    data_directory = os.path.join(temp_dir, corpus_name)
+    conf_path = os.path.join(data_directory, 'config.yml')
+    if os.path.exists(conf_path):
+        with open(conf_path, 'r') as f:
+            conf = yaml.load(f, Loader=yaml.SafeLoader)
+    else:
+        conf = {'dirty': False,
+                'begin': time.time(),
+                'version': __version__,
+                'type': 'align',
+                'corpus_directory': corpus_directory,
+                'dictionary_path': dictionary_path}
+    if clean \
+            or conf['dirty'] or conf['type'] != 'align' \
+            or conf['corpus_directory'] != corpus_directory \
+            or conf['version'] != __version__ \
+            or conf['dictionary_path'] != dictionary_path:
+        shutil.rmtree(data_directory, ignore_errors=True)
+
+    os.makedirs(data_directory, exist_ok=True)
+    os.makedirs(output_directory, exist_ok=True)
+    try:
+        corpus = AlignableCorpus(corpus_directory, data_directory,
+                        speaker_characters=speaker_characters,
+                        num_jobs=num_jobs)
+        if corpus.issues_check:
+            print('WARNING: Some issues parsing the corpus were detected. '
+                  'Please run the validator to get more information.')
+        print(corpus.speaker_utterance_info())
+        acoustic_model = AcousticModel(acoustic_model_path)
+        dictionary = Dictionary(dictionary_path, data_directory, word_set=corpus.word_set)
+        acoustic_model.validate(dictionary)
+
+        begin = time.time()
+        if config_path:
+            align_config = align_yaml_to_config(config_path)
+        else:
+            align_config = load_basic_align()
+        a = PretrainedAligner(corpus, dictionary, acoustic_model, align_config,
+                              temp_directory=data_directory,
+                              debug=debug)
+        if debug:
+            print('Setup pretrained aligner in {} seconds'.format(time.time() - begin))
+        a.verbose = verbose
+
+        begin = time.time()
+        a.align()
+        if debug:
+            print('Performed alignment in {} seconds'.format(time.time() - begin))
+
+        begin = time.time()
+        a.export_textgrids(output_directory)
+        if debug:
+            print('Exported TextGrids in {} seconds'.format(time.time() - begin))
+        print('Done! Everything took {} seconds'.format(time.time() - all_begin))
+    except Exception as _:
+        conf['dirty'] = True
+        raise
+    finally:
+        with open(conf_path, 'w') as f:
+            yaml.dump(conf, f)
+
+
+
 def validate_args(args, downloaded_acoustic_models, download_dictionaries):
     if not os.path.exists(args.corpus_directory):
         raise ArgumentError('Could not find the corpus directory {}.'.format(args.corpus_directory))
