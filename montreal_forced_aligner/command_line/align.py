@@ -103,8 +103,8 @@ def align_corpus(args):
             yaml.dump(conf, f)
 
 
-def custom_align_corpus(temp_directory, corpus_directory, output_directory, dictionary_path, acoustic_model_path,
-                        config_path, speaker_characters, clean=False, num_jobs=0, debug = False, verbose=False):
+def custom_align_corpus(temp_directory=None, corpus_directory='', output_directory='', dictionary_path='', acoustic_model_path='',
+                        config_path='', speaker_characters = 0, clean=False, num_jobs=0, debug = False, verbose=False):
     all_begin = time.time()
     if not temp_directory:
         temp_dir = TEMP_DIR
